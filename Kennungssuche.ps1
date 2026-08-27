@@ -1,10 +1,27 @@
-Add-Type -AssemblyName System.Windows.Forms
+﻿Add-Type -AssemblyName System.Windows.Forms
 Add-Type -AssemblyName System.Drawing
 
 [System.Windows.Forms.Application]::EnableVisualStyles()
 
 $script:CsvPath = Join-Path -Path $PSScriptRoot -ChildPath 'kennungen.csv'
 $script:Entries = @()
+
+function Import-EntriesCsv {
+    $bytes = [System.IO.File]::ReadAllBytes($script:CsvPath)
+    try {
+        $utf8 = New-Object System.Text.UTF8Encoding($false, $true)
+        $content = $utf8.GetString($bytes)
+    }
+    catch [System.Text.DecoderFallbackException] {
+        $content = [System.Text.Encoding]::Default.GetString($bytes)
+    }
+
+    if ($content.Length -gt 0 -and $content[0] -eq [char]0xFEFF) {
+        $content = $content.Substring(1)
+    }
+
+    return $content | ConvertFrom-Csv -Delimiter ';'
+}
 
 function Load-Entries {
     if (-not (Test-Path -LiteralPath $script:CsvPath)) {
@@ -18,7 +35,7 @@ function Load-Entries {
     }
 
     try {
-        $script:Entries = @(Import-Csv -LiteralPath $script:CsvPath -Delimiter ';' -Encoding UTF8 | Where-Object {
+        $script:Entries = @(Import-EntriesCsv | Where-Object {
             $_.Kennung -and $_.Vorname -and $_.Nachname
         })
         return $true
@@ -42,10 +59,9 @@ function Get-FilteredEntries {
 
     return @($script:Entries | Where-Object {
         $fullName = "$($_.Vorname) $($_.Nachname)"
-        $_.Kennung -like "*$term*" -or
-        $_.Vorname -like "*$term*" -or
-        $_.Nachname -like "*$term*" -or
-        $fullName -like "*$term*"
+        @($_.Kennung, $_.Vorname, $_.Nachname, $fullName) | Where-Object {
+            $_.IndexOf($term, [System.StringComparison]::CurrentCultureIgnoreCase) -ge 0
+        }
     })
 }
 
