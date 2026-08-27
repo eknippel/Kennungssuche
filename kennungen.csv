@@ -1,7 +1,7 @@
-Kennung;Vorname;Nachname
-BB-1001;Paul;Neumann
-BB-1002;Paula;Neumann
-BB-1003;Mara;Schmidt
-BB-1004;Paul;Keller
-BB-1005;Lena;Wagner
-BB-1006;Jonas;März
+"Kennung";"Vorname";"Nachname";"Handy";"Recherche";"SARS";"KBA";"AZR/LMR";"USB MIK";"USB VS"
+"BB-1001";"Paul";"Neumann";"False";"False";"False";"False";"False";"False";"False"
+"BB-1002";"Paula";"Neumann";"False";"False";"False";"False";"False";"False";"False"
+"BB-1003";"Mara";"Schmidt";"False";"False";"False";"False";"False";"False";"False"
+"BB-1004";"Paul";"Keller";"False";"False";"False";"False";"False";"False";"False"
+"BB-1005";"Lena";"Wagner";"False";"False";"False";"False";"False";"True";"False"
+"BB-1006";"Jonas";"März";"False";"False";"False";"False";"False";"False";"False"

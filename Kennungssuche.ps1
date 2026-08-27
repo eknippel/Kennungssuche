@@ -65,12 +65,76 @@ function Get-FilteredEntries {
     })
 }
 
+function ConvertTo-CheckboxValue($value) {
+    if ($value -is [bool]) {
+        return $value
+    }
+
+    return [string]$value -match '^(1|true|yes|ja)$'
+}
+
+function Save-Entries {
+    $checkedByKennung = @{}
+    foreach ($row in $grid.Rows) {
+        $checkedByKennung[$row.Cells['Kennung'].Value] = [pscustomobject]@{
+            Handy = ConvertTo-CheckboxValue $row.Cells['Handy'].Value
+            Recherche = ConvertTo-CheckboxValue $row.Cells['Recherche'].Value
+            'AZR/LMR' = ConvertTo-CheckboxValue $row.Cells['AZR/LMR'].Value
+            KBA = ConvertTo-CheckboxValue $row.Cells['KBA'].Value
+            SARS = ConvertTo-CheckboxValue $row.Cells['SARS'].Value
+            'USB MIK' = ConvertTo-CheckboxValue $row.Cells['USB MIK'].Value
+            'USB VS' = ConvertTo-CheckboxValue $row.Cells['USB VS'].Value
+        }
+    }
+
+    $rows = foreach ($entry in $script:Entries) {
+        $checks = $checkedByKennung[$entry.Kennung]
+        [pscustomobject]@{
+            Kennung = $entry.Kennung
+            Vorname = $entry.Vorname
+            Nachname = $entry.Nachname
+            Handy = if ($null -ne $checks) { $checks.Handy } else { ConvertTo-CheckboxValue $entry.Handy }
+            Recherche = if ($null -ne $checks) { $checks.Recherche } else { ConvertTo-CheckboxValue $entry.Recherche }
+            SARS = if ($null -ne $checks) { $checks.SARS } else { ConvertTo-CheckboxValue $entry.SARS }
+            KBA = if ($null -ne $checks) { $checks.KBA } else { ConvertTo-CheckboxValue $entry.KBA }
+            'AZR/LMR' = if ($null -ne $checks) { $checks.'AZR/LMR' } else { ConvertTo-CheckboxValue $entry.'AZR/LMR' }
+            'USB MIK' = if ($null -ne $checks) { $checks.'USB MIK' } else { ConvertTo-CheckboxValue $entry.'USB MIK' }
+            'USB VS' = if ($null -ne $checks) { $checks.'USB VS' } else { ConvertTo-CheckboxValue $entry.'USB VS' }
+        }
+    }
+
+    try {
+        $csv = $rows | ConvertTo-Csv -Delimiter ';' -NoTypeInformation
+        [System.IO.File]::WriteAllLines($script:CsvPath, $csv, (New-Object System.Text.UTF8Encoding($false)))
+        $statusLabel.Text = 'Änderungen gespeichert'
+    }
+    catch {
+        [System.Windows.Forms.MessageBox]::Show(
+            "Die Änderungen konnten nicht gespeichert werden:`n$($_.Exception.Message)",
+            'Kennungssuche',
+            [System.Windows.Forms.MessageBoxButtons]::OK,
+            [System.Windows.Forms.MessageBoxIcon]::Error
+        )
+    }
+}
+
 function Update-Grid {
     $grid.Rows.Clear()
     $matches = @(Get-FilteredEntries)
 
     foreach ($entry in $matches) {
-        [void]$grid.Rows.Add($entry.Kennung, $entry.Vorname, $entry.Nachname, "$($entry.Vorname) $($entry.Nachname)")
+        [void]$grid.Rows.Add(
+            $entry.Kennung,
+            $entry.Vorname,
+            $entry.Nachname,
+            (ConvertTo-CheckboxValue $entry.Handy),
+            (ConvertTo-CheckboxValue $entry.Recherche),
+            (ConvertTo-CheckboxValue $entry.SARS),
+            (ConvertTo-CheckboxValue $entry.KBA),
+            (ConvertTo-CheckboxValue $entry.'AZR/LMR'),
+            (ConvertTo-CheckboxValue $entry.'USB MIK'),
+            (ConvertTo-CheckboxValue $entry.'USB VS')
+        )
     }
 
     if ([string]::IsNullOrWhiteSpace($searchBox.Text)) {
@@ -137,7 +201,7 @@ $grid.Anchor = 'Top,Bottom,Left,Right'
 $grid.AllowUserToAddRows = $false
 $grid.AllowUserToDeleteRows = $false
 $grid.AllowUserToResizeRows = $false
-$grid.ReadOnly = $true
+$grid.ReadOnly = $false
 $grid.RowHeadersVisible = $false
 $grid.SelectionMode = 'FullRowSelect'
 $grid.MultiSelect = $false
@@ -148,12 +212,104 @@ $grid.GridColor = [System.Drawing.Color]::FromArgb(225, 230, 236)
 $grid.ColumnHeadersDefaultCellStyle.BackColor = [System.Drawing.Color]::FromArgb(25, 45, 75)
 $grid.ColumnHeadersDefaultCellStyle.ForeColor = [System.Drawing.Color]::White
 $grid.ColumnHeadersDefaultCellStyle.Font = New-Object System.Drawing.Font('Segoe UI Semibold', 10)
+$grid.ColumnHeadersDefaultCellStyle.Alignment = [System.Windows.Forms.DataGridViewContentAlignment]::MiddleCenter
 $grid.EnableHeadersVisualStyles = $false
 [void]$grid.Columns.Add('Kennung', 'Kennung')
 [void]$grid.Columns.Add('Vorname', 'Vorname')
 [void]$grid.Columns.Add('Nachname', 'Nachname')
-[void]$grid.Columns.Add('Vollname', 'Vollständiger Name')
+$handyColumn = New-Object System.Windows.Forms.DataGridViewCheckBoxColumn
+$handyColumn.Name = 'Handy'
+$handyColumn.HeaderText = 'Handy'
+$handyColumn.TrueValue = $true
+$handyColumn.FalseValue = $false
+$handyColumn.Width = 105
+[void]$grid.Columns.Add($handyColumn)
+$rechercheColumn = New-Object System.Windows.Forms.DataGridViewCheckBoxColumn
+$rechercheColumn.Name = 'Recherche'
+$rechercheColumn.HeaderText = 'Recherche'
+$rechercheColumn.TrueValue = $true
+$rechercheColumn.FalseValue = $false
+$rechercheColumn.Width = 125
+[void]$grid.Columns.Add($rechercheColumn)
+$categoryColumns = @(
+    @{ Name = 'SARS'; Width = 75 },
+    @{ Name = 'KBA'; Width = 75 },
+    @{ Name = 'AZR/LMR'; Width = 75 },
+    @{ Name = 'USB MIK'; Width = 75 },
+    @{ Name = 'USB VS'; Width = 75 }
+)
+foreach ($category in $categoryColumns) {
+    if ($category.Name -in @('USB MIK', 'USB VS')) {
+        $column = New-Object System.Windows.Forms.DataGridViewTextBoxColumn
+        $column.ReadOnly = $true
+    }
+    else {
+        $column = New-Object System.Windows.Forms.DataGridViewCheckBoxColumn
+    }
+    $column.Name = $category.Name
+    $column.HeaderText = $category.Name
+    if ($column -is [System.Windows.Forms.DataGridViewCheckBoxColumn]) {
+        $column.TrueValue = $true
+        $column.FalseValue = $false
+    }
+    $column.Width = $category.Width
+    [void]$grid.Columns.Add($column)
+}
+foreach ($column in $grid.Columns) {
+    $column.SortMode = [System.Windows.Forms.DataGridViewColumnSortMode]::Automatic
+}
 $form.Controls.Add($grid)
+
+$grid.Add_CellFormatting({
+    param($sender, $eventArgs)
+
+    if ($eventArgs.RowIndex -lt 0 -or $eventArgs.ColumnIndex -lt 0) {
+        return
+    }
+
+    $columnName = $sender.Columns[$eventArgs.ColumnIndex].Name
+    if ($columnName -notin @('USB MIK', 'USB VS')) {
+        return
+    }
+
+    $isAvailable = ConvertTo-CheckboxValue $eventArgs.Value
+    $eventArgs.CellStyle.BackColor = if ($isAvailable) {
+        [System.Drawing.Color]::FromArgb(76, 175, 80)
+    }
+    else {
+        [System.Drawing.Color]::FromArgb(220, 70, 70)
+    }
+    $eventArgs.CellStyle.ForeColor = [System.Drawing.Color]::White
+    $eventArgs.CellStyle.SelectionBackColor = $eventArgs.CellStyle.BackColor
+    $eventArgs.CellStyle.SelectionForeColor = [System.Drawing.Color]::White
+    $eventArgs.Value = ''
+    $eventArgs.FormattingApplied = $true
+})
+
+$grid.Add_CellClick({
+    param($sender, $eventArgs)
+
+    if ($eventArgs.RowIndex -lt 0 -or $eventArgs.ColumnIndex -lt 0) {
+        return
+    }
+
+    $columnName = $sender.Columns[$eventArgs.ColumnIndex].Name
+    if ($columnName -in @('USB MIK', 'USB VS')) {
+        $cell = $sender.Rows[$eventArgs.RowIndex].Cells[$eventArgs.ColumnIndex]
+        $cell.Value = -not (ConvertTo-CheckboxValue $cell.Value)
+        $sender.InvalidateCell($cell)
+    }
+})
+
+$saveButton = New-Object System.Windows.Forms.Button
+$saveButton.Text = 'Änderungen speichern'
+$saveButton.Location = New-Object System.Drawing.Point(650, 492)
+$saveButton.Size = New-Object System.Drawing.Size(165, 34)
+$saveButton.Anchor = 'Bottom,Right'
+$saveButton.FlatStyle = 'Flat'
+$saveButton.BackColor = [System.Drawing.Color]::FromArgb(25, 107, 146)
+$saveButton.ForeColor = [System.Drawing.Color]::White
+$form.Controls.Add($saveButton)
 
 $statusLabel = New-Object System.Windows.Forms.Label
 $statusLabel.ForeColor = [System.Drawing.Color]::FromArgb(90, 105, 125)
@@ -164,6 +320,7 @@ $form.Controls.Add($statusLabel)
 
 $searchBox.Add_TextChanged({ Update-Grid })
 $clearButton.Add_Click({ $searchBox.Clear(); $searchBox.Focus() })
+$saveButton.Add_Click({ Save-Entries })
 $reloadButton.Add_Click({
     if (Load-Entries) {
         Update-Grid
